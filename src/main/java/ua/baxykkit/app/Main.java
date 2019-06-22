@@ -1,0 +1,170 @@
+/**
+ * 
+ */
+package ua.baxykkit.app;
+
+import javax.xml.parsers.*;
+import org.xml.sax.*;
+import org.xml.sax.helpers.*;
+
+import java.util.*;
+import java.io.*;
+
+/**
+ * @author ak981
+ *
+ */
+public class Main extends DefaultHandler {
+
+	static final String JAXP_SCHEMA_LANGUAGE = "http://java.sun.com/xml/jaxp/properties/schemaLanguage";
+
+	static final String W3C_XML_SCHEMA = "http://www.w3.org/2001/XMLSchema";
+
+	static final String JAXP_SCHEMA_SOURCE = "http://java.sun.com/xml/jaxp/properties/schemaSource";
+	private Hashtable tags;
+
+	public void startDocument() throws SAXException {
+		tags = new Hashtable();
+	}
+
+	public void startElement(String namespaceURI, String localName, String qName, Attributes atts) throws SAXException {
+
+		String key = localName;
+		Object value = tags.get(key);
+
+		if (value == null) {
+			tags.put(key, new Integer(1));
+		} else {
+			int count = ((Integer) value).intValue();
+			count++;
+			tags.put(key, new Integer(count));
+		}
+	}
+
+	public void endDocument() throws SAXException {
+		Enumeration e = tags.keys();
+		while (e.hasMoreElements()) {
+			String tag = (String) e.nextElement();
+			int count = ((Integer) tags.get(tag)).intValue();
+			System.out.println("Local Name \"" + tag + "\" occurs " + count + " times");
+		}
+	}
+
+	private static String convertToFileURL(String filename) {
+		String path = new File(filename).getAbsolutePath();
+		if (File.separatorChar != '/') {
+			path = path.replace(File.separatorChar, '/');
+		}
+
+		if (!path.startsWith("/")) {
+			path = "/" + path;
+		}
+		return "file:" + path;
+	}
+
+	private static void usage() {
+		System.err.println("Usage: SAXLocalNameCount <file.xml>");
+		System.err.println("       -usage or -help = this message");
+		System.exit(1);
+	}
+
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) throws Exception {
+		String filename = null;
+		boolean dtdValidate = false;
+		boolean xsdValidate = false;
+		String schemaSource = null;
+
+		for (int i = 0; i < args.length; i++) {
+
+			if (args[i].equals("-dtd")) {
+				dtdValidate = true;
+			} else if (args[i].equals("-xsd")) {
+				xsdValidate = true;
+			} else if (args[i].equals("-xsdss")) {
+				if (i == args.length - 1) {
+					usage();
+				}
+				xsdValidate = true;
+				schemaSource = args[++i];
+			} else if (args[i].equals("-usage")) {
+				usage();
+			} else if (args[i].equals("-help")) {
+				usage();
+			} else {
+				filename = args[i];
+				if (i != args.length - 1) {
+					usage();
+				}
+			}
+		}
+
+		if (filename == null) {
+			usage();
+		}
+
+		SAXParserFactory spf = SAXParserFactory.newInstance();
+		spf.setNamespaceAware(true);
+		spf.setValidating(dtdValidate || xsdValidate);
+		SAXParser saxParser = spf.newSAXParser();
+		
+		if (xsdValidate) {
+		    try {
+		        saxParser.setProperty(JAXP_SCHEMA_LANGUAGE, W3C_XML_SCHEMA);
+		    }
+		    catch (SAXNotRecognizedException x){
+		        System.err.println("Error: JAXP SAXParser property not recognized: "
+		                           + JAXP_SCHEMA_LANGUAGE);
+
+		        System.err.println( "Check to see if parser conforms to the JAXP spec.");
+		        System.exit(1);
+		    }
+		}
+		
+		if (schemaSource != null) {
+		    saxParser.setProperty(JAXP_SCHEMA_SOURCE, new File(schemaSource));
+		}
+		
+		XMLReader xmlReader = saxParser.getXMLReader();
+		xmlReader.setContentHandler(new Main());
+		xmlReader.parse(convertToFileURL(filename));
+		xmlReader.setErrorHandler(new MyErrorHandler(System.err));
+
+	}
+
+	private static class MyErrorHandler implements ErrorHandler {
+		private PrintStream out;
+
+		MyErrorHandler(PrintStream out) {
+			this.out = out;
+		}
+
+		private String getParseExceptionInfo(SAXParseException spe) {
+			String systemId = spe.getSystemId();
+
+			if (systemId == null) {
+				systemId = "null";
+			}
+
+			String info = "URI=" + systemId + " Line=" + spe.getLineNumber() + ": " + spe.getMessage();
+
+			return info;
+		}
+
+		public void warning(SAXParseException spe) throws SAXException {
+			out.println("Warning: " + getParseExceptionInfo(spe));
+		}
+
+		public void error(SAXParseException spe) throws SAXException {
+			String message = "Error: " + getParseExceptionInfo(spe);
+			throw new SAXException(message);
+		}
+
+		public void fatalError(SAXParseException spe) throws SAXException {
+			String message = "Fatal Error: " + getParseExceptionInfo(spe);
+			throw new SAXException(message);
+		}
+	}
+}
